@@ -19,6 +19,9 @@ Usage:
     logger = logger_instance.get_logger("MyModule")
 """
 
-from .logger import Logger, LoggerFactory, get_logger
+try:
+    from .logger import Logger, LoggerFactory, get_logger
+except ImportError:
+    from logger import Logger, LoggerFactory, get_logger
 
 __all__ = ['Logger', 'LoggerFactory', 'get_logger']
