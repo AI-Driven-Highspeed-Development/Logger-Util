@@ -23,13 +23,3 @@ Usage:
     logger_instance = Logger(verbose=True, log_to_file=True)
     logger = logger_instance.get_logger("MyModule")
 """
-
-# try:
-#     from .logger import (Logger, get_logger, get_central_logger, 
-#                         log_debug, log_info, log_warning, log_error, log_critical)
-# except ImportError:
-#     from logger import (Logger, get_logger, get_central_logger,
-#                        log_debug, log_info, log_warning, log_error, log_critical)
-
-# __all__ = ['Logger', 'get_logger', 'get_central_logger', 
-#            'log_debug', 'log_info', 'log_warning', 'log_error', 'log_critical']
