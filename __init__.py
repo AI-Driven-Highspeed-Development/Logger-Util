@@ -4,15 +4,20 @@ ADHD Logger Utility Package
 A centralized logging utility for consistent logging across the ADHD project template.
 
 Usage:
-    from utils.logger import Logger, LoggerFactory, get_logger
+    from utils.logger_util import Logger, get_logger, get_central_logger
+    from utils.logger_util import log_debug, log_info, log_warning, log_error, log_critical
     
-    # Quick logger access
+    # Quick logger access for specific modules
     logger = get_logger("MyModule", verbose=True)
     logger.info("This is a message")
     
-    # Using LoggerFactory
-    logger = LoggerFactory.create_module_logger("MyModule", verbose=True)
-    logger.debug("Debug message")
+    # Centralized "mother of all loggers" for debugging
+    central = get_central_logger(verbose=True)
+    central.debug("Throw anything at this logger!")
+    
+    # No-brainer convenience functions (uses central logger)
+    log_debug("Quick debug message")
+    log_error("Something went wrong!")
     
     # Direct Logger class usage
     logger_instance = Logger(verbose=True, log_to_file=True)
@@ -20,8 +25,11 @@ Usage:
 """
 
 try:
-    from .logger import Logger, LoggerFactory, get_logger
+    from .logger import (Logger, get_logger, get_central_logger, 
+                        log_debug, log_info, log_warning, log_error, log_critical)
 except ImportError:
-    from logger import Logger, LoggerFactory, get_logger
+    from logger import (Logger, get_logger, get_central_logger,
+                       log_debug, log_info, log_warning, log_error, log_critical)
 
-__all__ = ['Logger', 'LoggerFactory', 'get_logger']
+__all__ = ['Logger', 'get_logger', 'get_central_logger', 
+           'log_debug', 'log_info', 'log_warning', 'log_error', 'log_critical']

@@ -7,20 +7,10 @@ from datetime import datetime
 class Logger:
     """
     A centralized logger utility for consistent logging across the application.
-    Provides singleton pattern to ensure consistent logging configuration.
     """
     
-    _instance = None
-    _initialized = False
-    
-    def __new__(cls, *args, **kwargs):
-        """Ensure only one instance of Logger exists."""
-        if not hasattr(cls, '_instance') or cls._instance is None:
-            cls._instance = super(Logger, cls).__new__(cls)
-        return cls._instance
-    
     def __init__(self, 
-                 name: str = "ADHD_Logger",
+                 name: str = "Logger",
                  level: str = "INFO", 
                  log_to_file: bool = False,
                  log_file_path: Optional[str] = None,
@@ -35,11 +25,6 @@ class Logger:
             log_file_path (Optional[str]): Path to log file (if log_to_file is True)
             verbose (bool): Enable verbose logging (sets level to DEBUG)
         """
-        
-        # Prevent re-initialization of singleton
-        if self._initialized:
-            return
-        self._initialized = True
         
         self.name = name
         self.level = logging.DEBUG if verbose else getattr(logging, level.upper(), logging.INFO)
@@ -154,68 +139,107 @@ class Logger:
         self.logger.handlers.clear()
 
 
-class LoggerFactory:
+
+
+
+# Global centralized logger instance for debugging and special purposes
+_central_logger = None
+
+def get_central_logger(verbose: bool = False, log_to_file: bool = True) -> logging.Logger:
     """
-    Factory class for creating logger instances with different configurations.
-    """
+    Get the centralized "mother of all loggers" for debugging and special purposes.
+    This is a singleton logger that you can throw anything at.
     
-    @staticmethod
-    def create_module_logger(module_name: str, 
-                           verbose: bool = False,
-                           log_to_file: bool = False) -> logging.Logger:
-        """
-        Create a logger for a specific module.
+    Args:
+        verbose (bool): Enable verbose logging
+        log_to_file (bool): Enable file logging (default True for central logger)
         
-        Args:
-            module_name (str): Name of the module
-            verbose (bool): Enable verbose logging
-            log_to_file (bool): Enable file logging
-            
-        Returns:
-            logging.Logger: Configured logger instance
-        """
+    Returns:
+        logging.Logger: The centralized logger instance
+    """
+    global _central_logger
+    if _central_logger is None:
         logger_instance = Logger(
-            name=f"ADHD_Logger.{module_name}",
+            name="CENTRAL",
             verbose=verbose,
-            log_to_file=log_to_file
+            log_to_file=log_to_file,
+            log_file_path=f"logs/central_{datetime.now().strftime('%Y%m%d')}.log"
         )
-        return logger_instance.get_logger(module_name)
-    
-    @staticmethod
-    def create_config_manager_logger(verbose: bool = False) -> logging.Logger:
-        """
-        Create a logger specifically for ConfigManager.
-        
-        Args:
-            verbose (bool): Enable verbose logging
-            
-        Returns:
-            logging.Logger: Configured logger instance
-        """
-        return LoggerFactory.create_module_logger("ConfigManager", verbose=verbose)
+        _central_logger = logger_instance.get_logger()
+    return _central_logger
 
 
 # Convenience function for quick logger access
-def get_logger(module_name: str = None, verbose: bool = False) -> logging.Logger:
+def get_logger(module_name: str = None, verbose: bool = False, log_to_file: bool = False) -> logging.Logger:
     """
     Get a logger instance.
     
     Args:
         module_name (str): Name of the module
         verbose (bool): Enable verbose logging
+        log_to_file (bool): Enable file logging
         
     Returns:
         logging.Logger: Logger instance
     """
-    logger_instance = Logger(verbose=verbose)
-    return logger_instance.get_logger(module_name)
+    if module_name:
+        logger_instance = Logger(
+            name=module_name,
+            verbose=verbose,
+            log_to_file=log_to_file
+        )
+        return logger_instance.get_logger()
+    else:
+        logger_instance = Logger(verbose=verbose, log_to_file=log_to_file)
+        return logger_instance.get_logger()
+
+
+# Convenience functions for central logger - no-brainer logging
+def log_debug(message: str):
+    """Quick debug logging to central logger."""
+    get_central_logger(verbose=True).debug(message)
+
+def log_info(message: str):
+    """Quick info logging to central logger."""
+    get_central_logger().info(message)
+
+def log_warning(message: str):
+    """Quick warning logging to central logger."""
+    get_central_logger().warning(message)
+
+def log_error(message: str):
+    """Quick error logging to central logger."""
+    get_central_logger().error(message)
+
+def log_critical(message: str):
+    """Quick critical logging to central logger."""
+    get_central_logger().critical(message)
 
 
 if __name__ == "__main__":
-    # Test the logger
+    print("Testing logger functionality...")
+    
+    # Test module-specific logger
+    print("\n1. Testing module-specific logger:")
     logger = get_logger("TestModule", verbose=True)
     logger.debug("This is a debug message")
     logger.info("This is an info message")
     logger.warning("This is a warning message")
     logger.error("This is an error message")
     logger.critical("This is a critical message")
+    
+    # Test central logger
+    print("\n2. Testing central logger:")
+    central = get_central_logger(verbose=True)
+    central.debug("Central logger debug message")
+    central.info("Central logger info message")
+    
+    # Test convenience functions
+    print("\n3. Testing convenience functions:")
+    log_debug("No-brainer debug message")
+    log_info("No-brainer info message")
+    log_warning("No-brainer warning message")
+    log_error("No-brainer error message")
+    log_critical("No-brainer critical message")
+    
+    print("\nAll tests completed!")
