@@ -1,0 +1,23 @@
+{
+    "module_name": "logger_util",
+    "module_description": {
+        "overview": "The Logger Utility provides a centralized and configurable logging system for the entire application. It simplifies the process of creating and managing loggers, with support for different log levels, console and file output, and custom formatting. It also offers a singleton 'central logger' for easy, application-wide logging.",
+        "key_features": [
+            "Create named loggers with specified log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+            "Support for logging to both the console and files.",
+            "Automatic creation of log directories and timestamped log files.",
+            "A singleton `get_central_logger` for a globally accessible logger instance.",
+            "Convenience functions (`log_info`, `log_error`, etc.) for quick logging to the central logger.",
+            "Ability to dynamically change the log level of a logger instance."
+        ]
+    },
+    "usage_examples": {
+        "creating_a_module_logger": "from utils.logger_util.logger import get_logger\n\n# Get a logger for a specific module\nmy_module_logger = get_logger('MyModule', verbose=True)\n\nmy_module_logger.info('This is an informational message from MyModule.')\nmy_module_logger.debug('This is a debug message, visible because verbose=True.')",
+        "using_the_central_logger": "from utils.logger_util.logger import get_central_logger\n\n# Get the central logger instance\ncentral_log = get_central_logger()\n\ncentral_log.warning('This is a warning that will be logged by the central logger.')",
+        "using_convenience_functions": "from utils.logger_util.logger import log_info, log_error\n\n# Log directly using convenience functions\nlog_info('A quick informational message.')\nlog_error('A critical error occurred!')"
+    },
+    "warning": {
+        "file_permissions": "When logging to a file, ensure the application has the necessary write permissions for the specified log directory (default is a 'logs' folder in the project root).",
+        "verbose_performance": "Enabling verbose (DEBUG level) logging can impact performance, especially in production environments. Use it judiciously for development and debugging."
+    }
+}
