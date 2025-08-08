@@ -3,10 +3,12 @@ import os
 import sys
 from typing import Optional
 from datetime import datetime
+from utils.logger_util.logger_style import LoggerStyle, NormalStyle
+from utils.logger_util.compact_style import CompactStyle, apply_style as apply_style_to_logger
 
 class Logger:
     """
-    A centralized logger utility for consistent logging across the application.
+    A centralized logger utility with pluggable styles (NormalStyle, CompactStyle).
     """
     
     def __init__(self, 
@@ -14,7 +16,8 @@ class Logger:
                  level: str = "INFO", 
                  log_to_file: bool = False,
                  log_file_path: Optional[str] = None,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 style: Optional[LoggerStyle] = None):
         """
         Initialize the Logger.
         
@@ -24,12 +27,14 @@ class Logger:
             log_to_file (bool): Whether to log to a file
             log_file_path (Optional[str]): Path to log file (if log_to_file is True)
             verbose (bool): Enable verbose logging (sets level to DEBUG)
+            style (LoggerStyle): Style to apply to console handler (default CompactStyle)
         """
         
         self.name = name
         self.level = logging.DEBUG if verbose else getattr(logging, level.upper(), logging.INFO)
         self.log_to_file = log_to_file
         self.log_file_path = log_file_path or f"logs/{name}_{datetime.now().strftime('%Y%m%d')}.log"
+        self.style: LoggerStyle = style or CompactStyle()
         
         # Create the main logger
         self.logger = logging.getLogger(self.name)
@@ -44,21 +49,12 @@ class Logger:
             self._setup_file_handler()
     
     def _setup_console_handler(self):
-        """Setup console handler for logging to stdout."""
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(self.level)
+        """Setup console handler for logging to stdout and apply style."""
+        # A stream handler will be created by apply_style_to_logger if missing
+        apply_style_to_logger(self.logger, self.style)
         
-        # Create formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        console_handler.setFormatter(formatter)
-        
-        self.logger.addHandler(console_handler)
-    
     def _setup_file_handler(self):
-        """Setup file handler for logging to file."""
+        """Setup file handler for logging to file with normal verbose formatter."""
         # Create logs directory if it doesn't exist
         log_dir = os.path.dirname(self.log_file_path)
         if log_dir and not os.path.exists(log_dir):
@@ -67,27 +63,27 @@ class Logger:
         file_handler = logging.FileHandler(self.log_file_path)
         file_handler.setLevel(self.level)
         
-        # Create formatter for file (more detailed)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+        # Use normal verbose formatter for files regardless of console style
+        formatter = NormalStyle().create_formatter()
         file_handler.setFormatter(formatter)
         
         self.logger.addHandler(file_handler)
     
+    def set_style(self, style: LoggerStyle) -> None:
+        """Change the console style at runtime for this logger."""
+        self.style = style
+        apply_style_to_logger(self.logger, self.style)
+    
     def get_logger(self, module_name: Optional[str] = None):
         """
-        Get a logger instance for a specific module.
-        
-        Args:
-            module_name (Optional[str]): Name of the module requesting the logger
-            
-        Returns:
-            logging.Logger: Logger instance
+        Get a logger instance for a specific module (inherits style from parent logger).
         """
         if module_name:
-            return logging.getLogger(f"{self.name}.{module_name}")
+            child = logging.getLogger(f"{self.name}.{module_name}")
+            child.setLevel(self.level)
+            # Do not add handlers to child; it will propagate to parent unless disabled
+            child.propagate = True
+            return child
         return self.logger
     
     def debug(self, message: str):
@@ -170,29 +166,31 @@ def get_central_logger(verbose: bool = False, log_to_file: bool = True) -> loggi
 
 
 # Convenience function for quick logger access
-def get_logger(module_name: str = None, verbose: bool = False, log_to_file: bool = False) -> logging.Logger:
+def get_logger(module_name: str = None, verbose: bool = False, log_to_file: bool = False, *, style: Optional[LoggerStyle] = None) -> logging.Logger:
     """
-    Get a logger instance.
+    Get a logger instance (default compact style). Pass style=NormalStyle() for standard.
     
     Args:
         module_name (str): Name of the module
         verbose (bool): Enable verbose logging
         log_to_file (bool): Enable file logging
+        style (LoggerStyle): Style to apply to logger (default CompactStyle)
         
     Returns:
         logging.Logger: Logger instance
     """
-    if module_name:
-        logger_instance = Logger(
-            name=module_name,
-            verbose=verbose,
-            log_to_file=log_to_file
-        )
-        return logger_instance.get_logger()
-    else:
-        logger_instance = Logger(verbose=verbose, log_to_file=log_to_file)
-        return logger_instance.get_logger()
+    logger_instance = Logger(
+        name=module_name or "Logger",
+        verbose=verbose,
+        log_to_file=log_to_file,
+        style=style or CompactStyle()
+    )
+    return logger_instance.get_logger()
 
+
+def set_logger_style(logger: logging.Logger, style: Optional[LoggerStyle] = None) -> None:
+    """Apply a console style to an existing standard logger (default to CompactStyle)."""
+    apply_style_to_logger(logger, style or CompactStyle())
 
 # Convenience functions for central logger - no-brainer logging
 def log_debug(message: str):
