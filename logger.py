@@ -1,49 +1,109 @@
 import logging
 import os
 import sys
-from typing import Optional
+import threading
+from typing import Optional, Dict
 from datetime import datetime
 from utils.logger_util.logger_style import LoggerStyle, NormalStyle
 from utils.logger_util.compact_style import CompactStyle, apply_style as apply_style_to_logger
 
+"""
+Internal registry to ensure one Logger wrapper per name.
+"""
+_LOGGER_REGISTRY: Dict[str, "Logger"] = {}
+_REGISTRY_LOCK = threading.Lock()
+
+
 class Logger:
     """
     A centralized logger utility with pluggable styles (NormalStyle, CompactStyle).
+    Per-name singleton: Logger(name="X") always returns the same wrapper.
     """
     
+    def __new__(cls,
+                name: str = "Logger",
+                *args,
+                **kwargs):
+        """Return an existing wrapper for the same name, or create one."""
+        # Determine registry key from provided name
+        key = name
+        with _REGISTRY_LOCK:
+            inst = _LOGGER_REGISTRY.get(key)
+            if inst is None:
+                inst = super().__new__(cls)
+                _LOGGER_REGISTRY[key] = inst
+            return inst
+
     def __init__(self, 
                  name: str = "Logger",
-                 level: str = "INFO", 
-                 log_to_file: bool = False,
+                 level: Optional[str] = None, 
+                 log_to_file: Optional[bool] = None,
                  log_file_path: Optional[str] = None,
-                 verbose: bool = False,
+                 verbose: Optional[bool] = None,
                  style: Optional[LoggerStyle] = None):
         """
-        Initialize the Logger.
-        
-        Args:
-            name (str): Logger name
-            level (str): Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            log_to_file (bool): Whether to log to a file
-            log_file_path (Optional[str]): Path to log file (if log_to_file is True)
-            verbose (bool): Enable verbose logging (sets level to DEBUG)
-            style (LoggerStyle): Style to apply to console handler (default CompactStyle)
+        First construction initializes internals.
+        Subsequent constructions with same name reuse the instance and, if any params are provided,
+        reconfigure it via configure(...).
         """
-        
-        self.name = name
-        self.level = logging.DEBUG if verbose else getattr(logging, level.upper(), logging.INFO)
-        self.log_to_file = log_to_file
-        self.log_file_path = log_file_path or f"logs/{name}_{datetime.now().strftime('%Y%m%d')}.log"
-        self.style: LoggerStyle = style or CompactStyle()
-        
-        # Create the main logger
-        self.logger = logging.getLogger(self.name)
+        first_init = not hasattr(self, "_initialized")
+        if first_init:
+            # Immutable identity
+            self.name = name
+            # Defaults
+            self.level = logging.INFO
+            self.log_to_file = False
+            self.log_file_path = f"logs/{name}_{datetime.now().strftime('%Y%m%d')}.log"
+            self.style = CompactStyle()
+            # Underlying stdlib logger
+            self.logger = logging.getLogger(self.name)
+            self.logger.propagate = True
+            self._initialized = True
+
+        # Apply configuration on first init or when any parameters are provided
+        if any(p is not None for p in (level, log_to_file, log_file_path, verbose, style)) or first_init:
+            self.configure(level=level,
+                           log_to_file=log_to_file,
+                           log_file_path=log_file_path,
+                           verbose=verbose,
+                           style=style)
+
+    def configure(self,
+                  *,
+                  level: Optional[str] = None,
+                  log_to_file: Optional[bool] = None,
+                  log_file_path: Optional[str] = None,
+                  verbose: Optional[bool] = None,
+                  style: Optional[LoggerStyle] = None) -> None:
+        """Reconfigure logger settings and rebuild handlers."""
+        # Resolve effective level
+        self.level = self._effective_level(current=self.level, level=level, verbose=verbose)
         self.logger.setLevel(self.level)
-        
-        # Clear existing handlers to prevent duplicates
+
+        # Update other settings only if provided
+        if log_to_file is not None:
+            self.log_to_file = log_to_file
+        if log_file_path is not None:
+            self.log_file_path = log_file_path
+        if style is not None:
+            self.style = style
+
+        # Rebuild handlers to reflect new config
+        self._rebuild_handlers()
+
+    @staticmethod
+    def _effective_level(current: int, level: Optional[str], verbose: Optional[bool]) -> int:
+        """Resolve new level from current, level string, and verbose flag."""
+        eff = current
+        if level is not None:
+            eff = getattr(logging, level.upper(), logging.INFO)
+        if verbose is True:
+            eff = logging.DEBUG
+        return eff
+
+    def _rebuild_handlers(self) -> None:
+        """Clear handlers, apply console style, and optional file handler."""
         self.logger.handlers.clear()
-        
-        # Setup handlers
         self._setup_console_handler()
         if self.log_to_file:
             self._setup_file_handler()
@@ -74,18 +134,6 @@ class Logger:
         self.style = style
         apply_style_to_logger(self.logger, self.style)
     
-    def get_logger(self, module_name: Optional[str] = None):
-        """
-        Get a logger instance for a specific module (inherits style from parent logger).
-        """
-        if module_name:
-            child = logging.getLogger(f"{self.name}.{module_name}")
-            child.setLevel(self.level)
-            # Do not add handlers to child; it will propagate to parent unless disabled
-            child.propagate = True
-            return child
-        return self.logger
-    
     def debug(self, message: str):
         """Log a debug message."""
         self.logger.debug(message)
@@ -113,13 +161,7 @@ class Logger:
         Args:
             level (str): New logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
-        new_level = getattr(logging, level.upper(), logging.INFO)
-        self.logger.setLevel(new_level)
-        self.level = new_level
-        
-        # Update all handlers
-        for handler in self.logger.handlers:
-            handler.setLevel(new_level)
+        self.configure(level=level)
     
     def add_custom_handler(self, handler: logging.Handler):
         """
@@ -133,9 +175,6 @@ class Logger:
     def remove_all_handlers(self):
         """Remove all handlers from the logger."""
         self.logger.handlers.clear()
-
-
-
 
 
 # Global centralized logger instance for debugging and special purposes
@@ -165,32 +204,13 @@ def get_central_logger(verbose: bool = False, log_to_file: bool = True) -> loggi
     return _central_logger
 
 
-# Convenience function for quick logger access
-def get_logger(module_name: str = None, verbose: bool = False, log_to_file: bool = False, *, style: Optional[LoggerStyle] = None) -> logging.Logger:
-    """
-    Get a logger instance (default compact style). Pass style=NormalStyle() for standard.
-    
-    Args:
-        module_name (str): Name of the module
-        verbose (bool): Enable verbose logging
-        log_to_file (bool): Enable file logging
-        style (LoggerStyle): Style to apply to logger (default CompactStyle)
-        
-    Returns:
-        logging.Logger: Logger instance
-    """
-    logger_instance = Logger(
-        name=module_name or "Logger",
-        verbose=verbose,
-        log_to_file=log_to_file,
-        style=style or CompactStyle()
-    )
-    return logger_instance.get_logger()
-
-
-def set_logger_style(logger: logging.Logger, style: Optional[LoggerStyle] = None) -> None:
-    """Apply a console style to an existing standard logger (default to CompactStyle)."""
-    apply_style_to_logger(logger, style or CompactStyle())
+def set_logger_style(logger, style: Optional[LoggerStyle] = None) -> None:
+    """Apply a console style to a logger (wrapper or std logging.Logger). Defaults to CompactStyle."""
+    target = logger
+    # Allow passing our Logger wrapper or a std logging.Logger
+    if isinstance(logger, Logger):
+        target = logger.get_logger()
+    apply_style_to_logger(target, style or CompactStyle())
 
 # Convenience functions for central logger - no-brainer logging
 def log_debug(message: str):
@@ -212,32 +232,3 @@ def log_error(message: str):
 def log_critical(message: str):
     """Quick critical logging to central logger."""
     get_central_logger().critical(message)
-
-
-if __name__ == "__main__":
-    print("Testing logger functionality...")
-    
-    # Test module-specific logger
-    print("\n1. Testing module-specific logger:")
-    logger = get_logger("TestModule", verbose=True)
-    logger.debug("This is a debug message")
-    logger.info("This is an info message")
-    logger.warning("This is a warning message")
-    logger.error("This is an error message")
-    logger.critical("This is a critical message")
-    
-    # Test central logger
-    print("\n2. Testing central logger:")
-    central = get_central_logger(verbose=True)
-    central.debug("Central logger debug message")
-    central.info("Central logger info message")
-    
-    # Test convenience functions
-    print("\n3. Testing convenience functions:")
-    log_debug("No-brainer debug message")
-    log_info("No-brainer info message")
-    log_warning("No-brainer warning message")
-    log_error("No-brainer error message")
-    log_critical("No-brainer critical message")
-    
-    print("\nAll tests completed!")

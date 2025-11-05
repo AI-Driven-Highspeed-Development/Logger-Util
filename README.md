@@ -13,10 +13,10 @@ Small, centralized, pluggable logging for console and files. Provides compact an
 - Pluggable console styles
   - `CompactStyle` (default): succinct, TTY‑aware colors
   - `NormalStyle`: verbose classic formatting
-- Helpers and singletons
-  - `get_logger(name, verbose=False)` returns a configured `logging.Logger`
-  - `get_central_logger(verbose=False)` returns the shared central logger
-  - `set_logger_style(logger, style)` switches styles on the fly
+- Wrapper and singletons
+  - `Logger(name)` returns a per‑name singleton wrapper; re‑calling with params updates settings
+  - `get_central_logger(verbose=False)` returns the shared central std logger
+  - `set_logger_style(logger, style)` switches styles on the fly (wrapper or std logger)
   - Convenience shorthands: `log_debug/info/warning/error/critical`
 - File logging
   - `Logger(..., log_to_file=True)` adds a file handler with normal style
@@ -25,37 +25,42 @@ Small, centralized, pluggable logging for console and files. Provides compact an
 ## Quickstart
 
 ```python
-from utils.logger_util.logger import get_logger, set_logger_style, get_central_logger
+from utils.logger_util.logger import Logger, set_logger_style, get_central_logger
 from utils.logger_util.logger_style import NormalStyle
-from utils.logger_util.compact_style import CompactStyle
 
-# Compact by default
-log = get_logger("MyModule", verbose=True)
-log.debug("Debug in compact style")
+# Per-name singleton wrapper
+log = Logger(name="MyModule", verbose=True)
+log.debug("Debug in compact style (default)")
 
 # Switch to normal style at runtime
 set_logger_style(log, NormalStyle())
 log.info("Now in normal style")
 
-# Central logger
-central = get_central_logger(verbose=True)
-central.debug("Central diagnostics")
+# File logging (default path: ./logs/MyModule_YYYYMMDD.log)
+Logger(name="MyModule", log_to_file=True).info("Also logged to file")
+
+# Central logger (stdlib logger)
+get_central_logger(verbose=True).debug("Central diagnostics")
 ```
 
 ## API
 
 ```python
-# Factory helpers
-get_logger(name: str | None = None, verbose: bool = False) -> logging.Logger
+# Helpers
 get_central_logger(verbose: bool = False) -> logging.Logger
-set_logger_style(logger: logging.Logger, style: LoggerStyle) -> None
+set_logger_style(logger: logging.Logger | Logger, style: LoggerStyle) -> None
 
-# Logger class (optional higher‑level orchestration)
+# Wrapper
 class Logger:
-    def __init__(self, name: str | None = None, verbose: bool = False, log_to_file: bool = False): ...
-    def get_logger(self) -> logging.Logger: ...
-    def set_style(self, style: LoggerStyle) -> None: ...
-    def set_level(self, level: str) -> None: ...
+  def __init__(self, name: str = "Logger", *, level: str | None = None,
+         log_to_file: bool | None = None, log_file_path: str | None = None,
+         verbose: bool | None = None, style: LoggerStyle | None = None): ...
+  def configure(self, *, level: str | None = None, log_to_file: bool | None = None,
+          log_file_path: str | None = None, verbose: bool | None = None,
+          style: LoggerStyle | None = None) -> None: ...
+  def get_logger(self, module_name: str | None = None) -> logging.Logger: ...
+  def set_style(self, style: LoggerStyle) -> None: ...
+  def set_level(self, level: str) -> None: ...
 
 # Styles
 class LoggerStyle: ...
