@@ -1,3 +1,5 @@
 folder_path: utils/logger_util
 type: util
+version: 0.0.1
+repo_url: https://github.com/AI-Driven-Highspeed-Development/Logger-Util.git
 requirements: []

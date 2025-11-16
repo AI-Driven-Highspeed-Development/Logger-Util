@@ -68,7 +68,7 @@ class NormalStyle(LoggerStyle): ...
 class CompactStyle(LoggerStyle): ...
 ```
 
-Notes
+## Notes
 - Stream handler is created on demand by `apply_style` and reused.
 - Child loggers inherit handlers from parents; avoid adding duplicate handlers to children.
 - File handlers always use NormalStyle (full context), independent of console style.
