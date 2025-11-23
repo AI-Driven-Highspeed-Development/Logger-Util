@@ -2,6 +2,10 @@ import logging
 import os
 import sys
 import threading
+import fcntl
+import atexit
+import queue
+from logging.handlers import QueueHandler, QueueListener
 from typing import Optional, Dict
 from datetime import datetime
 from utils.logger_util.logger_style import LoggerStyle, NormalStyle
@@ -13,6 +17,36 @@ Internal registry to ensure one Logger wrapper per name.
 _LOGGER_REGISTRY: Dict[str, "Logger"] = {}
 _REGISTRY_LOCK = threading.Lock()
 
+LOG_TO_FILE_OVERRIDE = False  # Set to True to force all loggers to log to file, False to respect individual settings
+LOG_FILE_PATH_OVERRIDE: Optional[str] = None  # Set to a file path string to override all loggers' file paths
+LEVEL_OVERRIDE: Optional[str] = None  # Set to a logging level string (e.g., "DEBUG") to override all loggers' levels
+
+class ConcurrentFileHandler(logging.FileHandler):
+    """
+    FileHandler that uses fcntl to ensure process safety on Linux.
+    Acquires an exclusive lock before writing and releases it immediately after.
+    """
+    def __init__(self, filename, mode='a', encoding=None, delay=False, use_lock=True):
+        super().__init__(filename, mode, encoding, delay)
+        self.use_lock = use_lock
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            
+            # Acquire process lock (blocking)
+            if self.use_lock:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                stream.write(msg + self.terminator)
+                self.flush()
+            finally:
+                # Release process lock
+                if self.use_lock:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            self.handleError(record)
 
 class Logger:
     """
@@ -51,7 +85,7 @@ class Logger:
             # Immutable identity
             self.name = name
             # Defaults
-            self.level = logging.INFO
+            self.level = logging.INFO 
             self.log_to_file = False
             self.log_file_path = f"logs/{name}_{datetime.now().strftime('%Y%m%d')}.log"
             self.style = CompactStyle()
@@ -94,6 +128,9 @@ class Logger:
     @staticmethod
     def _effective_level(current: int, level: Optional[str], verbose: Optional[bool]) -> int:
         """Resolve new level from current, level string, and verbose flag."""
+        if LEVEL_OVERRIDE:
+            return getattr(logging, LEVEL_OVERRIDE.upper(), logging.INFO)
+
         eff = current
         if level is not None:
             eff = getattr(logging, level.upper(), logging.INFO)
@@ -103,9 +140,14 @@ class Logger:
 
     def _rebuild_handlers(self) -> None:
         """Clear handlers, apply console style, and optional file handler."""
+        # Stop existing listener if it exists to prevent resource leaks
+        if hasattr(self, "_listener") and self._listener:
+            self._listener.stop()
+            self._listener = None
+
         self.logger.handlers.clear()
         self._setup_console_handler()
-        if self.log_to_file:
+        if self.log_to_file or LOG_TO_FILE_OVERRIDE:
             self._setup_file_handler()
     
     def _setup_console_handler(self):
@@ -115,20 +157,44 @@ class Logger:
         
     def _setup_file_handler(self):
         """Setup file handler for logging to file with normal verbose formatter."""
+        target_path = LOG_FILE_PATH_OVERRIDE if LOG_FILE_PATH_OVERRIDE else self.log_file_path
+
         # Create logs directory if it doesn't exist
-        log_dir = os.path.dirname(self.log_file_path)
+        log_dir = os.path.dirname(target_path)
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
         
-        file_handler = logging.FileHandler(self.log_file_path)
+        # 1. Create the blocking file handler (but don't attach it to logger directly)
+        file_handler = ConcurrentFileHandler(target_path, use_lock=True)
         file_handler.setLevel(self.level)
-        
-        # Use normal verbose formatter for files regardless of console style
         formatter = NormalStyle().create_formatter()
         file_handler.setFormatter(formatter)
         
-        self.logger.addHandler(file_handler)
+        # 2. Create a Queue and a QueueHandler
+        log_queue = queue.Queue(-1) # Infinite queue
+        queue_handler = QueueHandler(log_queue)
+        queue_handler.setLevel(self.level)
+        
+        # 3. Create and start the listener in a background thread
+        # The listener reads from queue -> writes to file_handler (blocking happens here)
+        self._listener = QueueListener(log_queue, file_handler)
+        self._listener.start()
+        
+        # 4. Ensure listener stops on exit to flush logs
+        atexit.register(self._listener.stop)
+        
+        # 5. Attach the non-blocking QueueHandler to the logger
+        self.logger.addHandler(queue_handler)
     
+    def get_logger(self) -> logging.Logger:
+        """
+        Get the underlying standard logging.Logger instance.
+        
+        Returns:
+            logging.Logger: The underlying logger
+        """
+        return self.logger
+
     def set_style(self, style: LoggerStyle) -> None:
         """Change the console style at runtime for this logger."""
         self.style = style
