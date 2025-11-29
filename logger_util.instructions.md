@@ -6,7 +6,7 @@ Logger Util:
 - Purpose: Centralized logging helpers that standardize formatting, verbose toggles, and optional file handlers across the framework using Python's `logging` module.
 - Usage:
 ```python
-from utils.logger_util.logger import Logger, get_central_logger, set_logger_style, log_info
+from utils.logger_util import Logger, get_central_logger, set_logger_style, log_info
 from utils.logger_util.logger_style import NormalStyle
 
 # Standard usage
