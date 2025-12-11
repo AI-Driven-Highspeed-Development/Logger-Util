@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import threading
 import fcntl
@@ -90,7 +91,7 @@ class Logger:
             self.style = CompactStyle()
             # Underlying stdlib logger
             self.logger = logging.getLogger(self.name)
-            self.logger.propagate = True
+            self.logger.propagate = False  # Prevent duplicate logs from parent/root handlers
             self._initialized = True
 
         # Apply configuration on first init or when any parameters are provided
