@@ -8,8 +8,8 @@ import queue
 from logging.handlers import QueueHandler, QueueListener
 from typing import Optional, Dict
 from datetime import datetime
-from utils.logger_util.logger_style import LoggerStyle, NormalStyle
-from utils.logger_util.compact_style import CompactStyle, apply_style as apply_style_to_logger
+from .logger_style import LoggerStyle, NormalStyle
+from .compact_style import CompactStyle, apply_style as apply_style_to_logger
 
 """
 Internal registry to ensure one Logger wrapper per name.

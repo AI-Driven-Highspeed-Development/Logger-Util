@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from typing import Optional
-from utils.logger_util.logger_style import LoggerStyle
+from .logger_style import LoggerStyle
 
 __all__ = [
     "CompactStyle",
