@@ -17,6 +17,7 @@ Internal registry to ensure one Logger wrapper per name.
 _LOGGER_REGISTRY: Dict[str, "Logger"] = {}
 _REGISTRY_LOCK = threading.Lock()
 
+DEFAULT_LOG_DIR = "logs"  # Default directory for log files; can be overridden via LOG_FILE_PATH_OVERRIDE
 LOG_TO_FILE_OVERRIDE = False  # Set to True to force all loggers to log to file, False to respect individual settings
 LOG_FILE_PATH_OVERRIDE: Optional[str] = None  # Set to a file path string to override all loggers' file paths
 LEVEL_OVERRIDE: Optional[str] = None  # Set to a logging level string (e.g., "DEBUG") to override all loggers' levels
@@ -87,7 +88,7 @@ class Logger:
             # Defaults
             self.level = logging.INFO 
             self.log_to_file = False
-            self.log_file_path = f"logs/{name}_{datetime.now().strftime('%Y%m%d')}.log"
+            self.log_file_path = f"{DEFAULT_LOG_DIR}/{name}_{datetime.now().strftime('%Y%m%d')}.log"
             self.style = CompactStyle()
             # Underlying stdlib logger
             self.logger = logging.getLogger(self.name)
@@ -264,7 +265,7 @@ def get_central_logger(verbose: bool = False, log_to_file: bool = True) -> loggi
             name="CENTRAL",
             verbose=verbose,
             log_to_file=log_to_file,
-            log_file_path=f"logs/central_{datetime.now().strftime('%Y%m%d')}.log"
+            log_file_path=f"{DEFAULT_LOG_DIR}/central_{datetime.now().strftime('%Y%m%d')}.log"
         )
         _central_logger = logger_instance.get_logger()
     return _central_logger

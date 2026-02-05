@@ -1,13 +1,13 @@
 ---
-applyTo: "project/**/*.py,managers/**/*.py,plugins/**/*.py,utils/**/*.py,mcps/**/*.py,cores/**/*.py,*.py"
+applyTo: "modules/**/*.py,project/**/*.py,*.py"
 ---
 
 Logger Util:
 - Purpose: Centralized logging helpers that standardize formatting, verbose toggles, and optional file handlers across the framework using Python's `logging` module.
 - Usage:
 ```python
-from utils.logger_util import Logger, get_central_logger, set_logger_style, log_info
-from utils.logger_util.logger_style import NormalStyle
+from modules.foundation.logger_util import Logger, get_central_logger, set_logger_style, log_info
+from modules.foundation.logger_util.logger_style import NormalStyle
 
 # Standard usage
 log = Logger(name="MyModule", verbose=True, log_to_file=True)
